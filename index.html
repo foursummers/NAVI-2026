@@ -203,6 +203,12 @@ const VOLO_CERT_TYPE = '0x549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3
 const VOLO_API = 'https://vault-api.volosui.com/api/v1';
 const SCALE27 = 1000000000000000000000000000n;
 
+const DEFAULT_WALLETS = [
+  {address:'0x3cb47b90fc7634b6268280f006779e268d00dbb473a6cc700b9597bff092bd11', name:'B7 - 01'},
+  {address:'0x20c1145f631cdfee7fd51a086e57b934effc38d494ae4cd9a5867792a009a284', name:'B7 - 02'}
+];
+const IS_MANAGE = new URLSearchParams(location.search).has('manage');
+
 const KNOWN_DECIMALS = {
   SUI:9, USDC:6, wUSDC:6, USDT:6, suiUSDT:6, suiUSDe:6, FDUSD:6, AUSD:6, USDY:6, BUCK:9, USDSUI:6,
   vSUI:9, CERT:9, haSUI:9, stSUI:9, NAVX:9, DEEP:6, CETUS:9, NS:6, BLUE:9,
@@ -218,6 +224,7 @@ const Router = {
   parse() {
     const p = new URLSearchParams(location.search);
     const addrs = (p.get('wallets')||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(!addrs.length) return DEFAULT_WALLETS.map(w=>({...w}));
     const names = (p.get('names')||'').split(',').map(s=>s.trim().replace(/_/g,' '));
     return addrs.map((a,i)=>({address:a, name:names[i]||`Wallet ${i+1}`}));
   },
@@ -227,7 +234,20 @@ const Router = {
     else{url.searchParams.delete('wallets');url.searchParams.delete('names');}
     history.replaceState(null,'',url.toString());
   },
-  shareLink(){const u=new URL(location.href);u.searchParams.delete('edit');return u.toString();}
+  shareLink(){
+    const u=new URL(location.href);
+    u.searchParams.delete('manage');
+    if(!u.searchParams.has('wallets')){
+      u.searchParams.set('wallets',S.wallets.map(x=>x.address).join(','));
+      u.searchParams.set('names',S.wallets.map(x=>x.name.replace(/\s+/g,'_')).join(','));
+    }
+    return u.toString();
+  },
+  manageLink(){
+    const u=new URL(Router.shareLink());
+    u.searchParams.set('manage','1');
+    return u.toString();
+  }
 };
 
 /* ── RPC ── */
@@ -431,9 +451,15 @@ function renderEmpty(){
 function renderShareBar(){
   const el=document.getElementById('share-bar');if(!S.wallets.length){el.innerHTML='';return;}
   const link=Router.shareLink();
-  el.innerHTML=`<div class="share-bar"><span style="font-weight:600;white-space:nowrap">Share this report:</span>
-    <input readonly value="${link}" onclick="this.select()">
-    <button class="btn btn-primary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(()=>{this.textContent='Copied!'});setTimeout(()=>this.textContent='Copy Link',1500)">Copy Link</button></div>`;
+  if(IS_MANAGE){
+    el.innerHTML=`<div class="share-bar"><span style="font-weight:600;white-space:nowrap">📊 Admin Mode</span>
+      <input readonly value="${link}" onclick="this.select()" title="Share link (read-only)">
+      <button class="btn btn-primary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(()=>{this.textContent='Copied!'});setTimeout(()=>this.textContent='Share Read-Only',1500)">Share Read-Only</button></div>`;
+  }else{
+    el.innerHTML=`<div class="share-bar"><span style="font-weight:600;white-space:nowrap">📊 Live Report</span>
+      <input readonly value="${link}" onclick="this.select()">
+      <button class="btn btn-primary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(()=>{this.textContent='Copied!'});setTimeout(()=>this.textContent='Copy Link',1500)">Copy Link</button></div>`;
+  }
 }
 
 /* ── Tab 1: Yield ── */
@@ -574,30 +600,39 @@ function buildSidebar(){
     b.innerHTML=`${n.icon}<span><span class="ni-lm">${n.label}</span><span class="ni-ls">${n.sub}</span></span>`;b.onclick=()=>showPanel(n.id);si.appendChild(b);});
   si.insertAdjacentHTML('beforeend','<div class="nd"></div><div class="ns-lbl">Wallets</div>');
   const ww=document.createElement('div');ww.id='wl-wrap';si.appendChild(ww);renderWalletList();
-  si.insertAdjacentHTML('beforeend',`
-    <div class="wmgr-toggle" onclick="document.getElementById('wmgr-panel').classList.toggle('open')">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 4v4M4 6h4" stroke-linecap="round"/></svg> Manage Wallets</div>
-    <div class="wmgr-panel" id="wmgr-panel">
-      <div style="font-size:11px;font-weight:700;margin-bottom:8px">Add / Remove Wallet</div>
-      <input class="wm-inp" id="wm-code" type="password" placeholder="Verification code" autocomplete="off">
-      <input class="wm-inp" id="wm-name" placeholder="Wallet name">
-      <input class="wm-inp" id="wm-addr" placeholder="0x… SUI address" style="font-family:monospace;font-size:10px">
-      <button class="wm-btn" onclick="addWallet()">+ Add Wallet</button>
-      <div style="font-size:10px;color:var(--tm);margin:6px 0 4px">Remove:</div>
-      <select class="wm-inp" id="wm-rm-sel" style="cursor:pointer"></select>
-      <button class="wm-btn sec" onclick="removeWallet()">Remove Selected</button>
-      <div class="wm-msg" id="wm-msg"></div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">
-        <div style="font-size:11px;font-weight:700;margin-bottom:6px">Share Report Link</div>
-        <div style="display:flex;gap:4px"><input class="wm-inp" id="share-url" readonly style="margin:0;font-family:monospace;font-size:9px;flex:1">
-        <button class="wm-btn" style="width:auto;padding:0 10px;margin:0" onclick="copyShareLink()">Copy</button></div></div></div>`);
-  syncRemoveSel();updateShareUrl();
+  if(IS_MANAGE){
+    si.insertAdjacentHTML('beforeend',`
+      <div class="wmgr-toggle" onclick="document.getElementById('wmgr-panel').classList.toggle('open')">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 4v4M4 6h4" stroke-linecap="round"/></svg> Manage Wallets</div>
+      <div class="wmgr-panel" id="wmgr-panel">
+        <div style="font-size:11px;font-weight:700;margin-bottom:8px">Add / Remove Wallet</div>
+        <input class="wm-inp" id="wm-code" type="password" placeholder="Verification code" autocomplete="off">
+        <input class="wm-inp" id="wm-name" placeholder="Wallet name">
+        <input class="wm-inp" id="wm-addr" placeholder="0x… SUI address" style="font-family:monospace;font-size:10px">
+        <button class="wm-btn" onclick="addWallet()">+ Add Wallet</button>
+        <div style="font-size:10px;color:var(--tm);margin:6px 0 4px">Remove:</div>
+        <select class="wm-inp" id="wm-rm-sel" style="cursor:pointer"></select>
+        <button class="wm-btn sec" onclick="removeWallet()">Remove Selected</button>
+        <div class="wm-msg" id="wm-msg"></div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">
+          <div style="font-size:11px;font-weight:700;margin-bottom:6px">Share Report Link (read-only)</div>
+          <div style="display:flex;gap:4px"><input class="wm-inp" id="share-url" readonly style="margin:0;font-family:monospace;font-size:9px;flex:1">
+          <button class="wm-btn" style="width:auto;padding:0 10px;margin:0" onclick="copyShareLink()">Copy</button></div>
+          <div style="margin-top:6px"><div style="font-size:11px;font-weight:700;margin-bottom:4px">Admin Link (with management)</div>
+          <div style="display:flex;gap:4px"><input class="wm-inp" id="manage-url" readonly style="margin:0;font-family:monospace;font-size:9px;flex:1">
+          <button class="wm-btn" style="width:auto;padding:0 10px;margin:0" onclick="navigator.clipboard.writeText(Router.manageLink()).then(()=>wmMsg('Copied!',true))">Copy</button></div></div>
+        </div></div>`);
+    syncRemoveSel();updateShareUrl();
+  }
 }
 
 function renderWalletList(){const w=document.getElementById('wl-wrap');if(!w)return;w.innerHTML='';
   S.wallets.forEach(v=>w.insertAdjacentHTML('beforeend',`<div class="wi"><div class="wi-name">${v.name}</div><div class="wi-row"><span class="wi-addr" title="${v.address}">${shortAddr(v.address)}</span><span class="wi-acts"><button class="wi-btn" onclick="cpAddr('${v.address}',this)" title="Copy"><svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><path d="M1.5 7.5V1.5h6"/></svg></button><a class="wi-btn" href="https://suivision.xyz/account/${v.address}" target="_blank" title="SuiVision"><svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 9.5L9.5 1.5M6 1.5h3.5v3.5"/></svg></a></span></div></div>`));}
 function syncRemoveSel(){const s=document.getElementById('wm-rm-sel');if(!s)return;s.innerHTML='';S.wallets.forEach((w,i)=>s.insertAdjacentHTML('beforeend',`<option value="${i}">${w.name} (${shortAddr(w.address)})</option>`));}
-function updateShareUrl(){const e=document.getElementById('share-url');if(e)e.value=Router.shareLink();}
+function updateShareUrl(){
+  const e=document.getElementById('share-url');if(e)e.value=Router.shareLink();
+  const m=document.getElementById('manage-url');if(m)m.value=Router.manageLink();
+}
 function wmMsg(t,ok){const e=document.getElementById('wm-msg');if(!e)return;e.textContent=t;e.className='wm-msg'+(ok?' ok':'');setTimeout(()=>e.textContent='',3000);}
 function checkCode(){return(document.getElementById('wm-code')?.value||'').trim()===EDIT_CODE||(wmMsg('Incorrect code.'),false);}
 function addWallet(){if(!checkCode())return;const n=(document.getElementById('wm-name')?.value||'').trim(),a=(document.getElementById('wm-addr')?.value||'').trim();
