@@ -288,11 +288,15 @@ async function fetchClaimedRewards(addr){
 
 async function fetchVoloPosition(addr){
   try{
-    const r=await fetch(`${VOLO_API}/users/${addr}/position`);
-    if(!r.ok)return[];
+    const proxy=location.hostname==='localhost'||location.hostname==='127.0.0.1'
+      ?`${VOLO_API}/users/${addr}/position`
+      :`/api/volo?address=${addr}`;
+    const r=await fetch(proxy);
+    if(!r.ok)throw new Error(r.status);
     const d=await r.json();
-    return Array.isArray(d)?d:[];
-  }catch{return[];}
+    if(Array.isArray(d)&&d.length)return d;
+  }catch(e){console.warn('Volo API proxy failed, falling back to wallet balance:',e.message);}
+  return[];
 }
 
 async function readStorageStructure(){
@@ -390,6 +394,18 @@ async function loadAllData(){
           wd.voloHoldings.push({amount:vp.poolShareTokenBalance||0,valueUSD:vp.poolShareTokenUsd||0,
             price:vp.tokenPrice||0,apr:vp.vaultApr||0,yieldLifetimeUsd:vp.yieldLifetimeUsd||0,
             yieldLifetimeAmount:vp.yieldLifetimeAmount||0,protocol:vp.protocol||'volo'});
+        }
+      }
+      if(!wd.voloHoldings.length&&bals.status==='fulfilled'){
+        for(const b of bals.value){
+          if(normCT(b.coinType)===normCT(VOLO_CERT_TYPE)){
+            const amt=Number(b.balance)/1e9;
+            const vp=Object.values(S.coinTypeToPool).find(p=>(p.token?.symbol||'').toLowerCase()==='vsui');
+            const price=vp?Number(vp.token?.price||0):0;
+            const supApr=Number(vp?.supplyIncentiveApyInfo?.vaultApr||0);
+            wd.voloHoldings.push({amount:amt,valueUSD:amt*price,price,apr:supApr,
+              yieldLifetimeUsd:0,yieldLifetimeAmount:0,protocol:'volo (wallet balance)'});
+          }
         }
       }
       try{wd.positions=await fetchUserPositions(w.address);}catch(e){S.errors.push(`Positions ${w.name}: ${e.message}`);}
@@ -602,9 +618,9 @@ function buildSidebar(){
   const ww=document.createElement('div');ww.id='wl-wrap';si.appendChild(ww);renderWalletList();
   if(IS_MANAGE){
     si.insertAdjacentHTML('beforeend',`
-      <div class="wmgr-toggle" onclick="document.getElementById('wmgr-panel').classList.toggle('open')">
+      <div class="wmgr-toggle" onclick="document.getElementById('wmgr-panel').classList.toggle('open')" style="background:var(--teal-bg);border-color:var(--teal-m);color:var(--teal-d)">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 4v4M4 6h4" stroke-linecap="round"/></svg> Manage Wallets</div>
-      <div class="wmgr-panel" id="wmgr-panel">
+      <div class="wmgr-panel open" id="wmgr-panel">
         <div style="font-size:11px;font-weight:700;margin-bottom:8px">Add / Remove Wallet</div>
         <input class="wm-inp" id="wm-code" type="password" placeholder="Verification code" autocomplete="off">
         <input class="wm-inp" id="wm-name" placeholder="Wallet name">
@@ -623,6 +639,10 @@ function buildSidebar(){
           <button class="wm-btn" style="width:auto;padding:0 10px;margin:0" onclick="navigator.clipboard.writeText(Router.manageLink()).then(()=>wmMsg('Copied!',true))">Copy</button></div></div>
         </div></div>`);
     syncRemoveSel();updateShareUrl();
+  }else{
+    si.insertAdjacentHTML('beforeend',`
+      <a href="${Router.manageLink()}" class="wmgr-toggle" style="text-decoration:none;margin-top:8px">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1.5v2M6 8.5v2M1.5 6h2M8.5 6h2M2.8 2.8l1.4 1.4M7.8 7.8l1.4 1.4M9.2 2.8L7.8 4.2M4.2 7.8L2.8 9.2"/><circle cx="6" cy="6" r="2"/></svg> Admin Panel</a>`);
   }
 }
 
