@@ -171,8 +171,8 @@ tbody tr:hover{background:#fafbfc}
     <div class="sec" id="sec-supply"><div class="sec-head"><span class="sec-title">NAVI Supply Positions</span><div class="sec-right"><a href="https://app.naviprotocol.io/" target="_blank" class="btn">Open NAVI ↗</a></div></div>
       <table><thead><tr><th>Asset</th><th class="r">Amount</th><th class="r">Value USD</th><th class="r">APR</th><th class="r">Liq. Threshold</th></tr></thead><tbody id="sup-body"></tbody></table></div>
     <div class="sec" id="sec-borrow"><div class="sec-head"><span class="sec-title">NAVI Borrow Positions</span></div><div id="bor-content"></div></div>
-    <div class="sec" id="sec-volo" style="display:none"><div class="sec-head"><span class="sec-title">Volo Vault (vSUI in wallet)</span><div class="sec-right"><a href="https://www.volosui.com/" target="_blank" class="btn">Open Volo ↗</a></div></div>
-      <table><thead><tr><th>Asset</th><th>Wallet</th><th class="r">Amount</th><th class="r">Value USD</th></tr></thead><tbody id="volo-body"></tbody></table></div>
+    <div class="sec" id="sec-volo" style="display:none"><div class="sec-head"><span class="sec-title">Volo Vault Positions</span><div class="sec-right"><span class="data-src">● vault-api.volosui.com</span><a href="https://www.volosui.com/" target="_blank" class="btn" style="margin-left:6px">Open Volo ↗</a></div></div>
+      <table><thead><tr><th>Asset</th><th>Wallet</th><th class="r">Amount</th><th class="r">Value USD</th><th class="r">APR</th><th class="r">Lifetime Yield</th></tr></thead><tbody id="volo-body"></tbody></table></div>
     <div class="sec"><div class="sec-head"><span class="sec-title">Wallet Balances (on-chain)</span><div class="sec-right"><span class="data-src">● suix_getAllBalances</span></div></div>
       <table><thead><tr><th>Asset</th><th>Wallet</th><th class="r">Amount</th><th class="r">Price</th><th class="r">Value USD</th></tr></thead><tbody id="bal-body"></tbody></table></div>
   </div>
@@ -200,6 +200,7 @@ const SUI_RPC = 'https://fullnode.mainnet.sui.io:443';
 const NAVI_API = 'https://open-api.naviprotocol.io/api';
 const NAVI_STORAGE = '0xbb4e2f4b6205c2e2a2db47aeb4f830796ec7c005f88537ee775986639bc442fe';
 const VOLO_CERT_TYPE = '0x549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3b9a32d3f55::cert::CERT';
+const VOLO_API = 'https://vault-api.volosui.com/api/v1';
 const SCALE27 = 1000000000000000000000000000n;
 
 const KNOWN_DECIMALS = {
@@ -262,6 +263,15 @@ async function fetchClaimedRewards(addr){
   try{const d=await naviGet(`/navi/user/rewards?userAddress=${addr}`);
     if(d?.data?.rewards&&Array.isArray(d.data.rewards))return d.data.rewards;
     if(Array.isArray(d?.data))return d.data;return Array.isArray(d)?d:[];
+  }catch{return[];}
+}
+
+async function fetchVoloPosition(addr){
+  try{
+    const r=await fetch(`${VOLO_API}/users/${addr}/position`);
+    if(!r.ok)return[];
+    const d=await r.json();
+    return Array.isArray(d)?d:[];
   }catch{return[];}
 }
 
@@ -343,34 +353,38 @@ async function loadAllData(){
   if(!S.wallets.length){renderEmpty();return;}
   showLoader('Fetching pool data from NAVI Protocol…');
   S.errors=[];S.perWallet={};S.userInfoTableId=null;S.reserveTableId=null;
+  try{
+    try{await fetchPools();}catch(e){S.errors.push('Pools: '+e.message);console.error('fetchPools:',e);}
+    try{await readStorageStructure();}catch(e){S.errors.push('Storage: '+e.message);console.error('readStorage:',e);}
 
-  try{await fetchPools();}catch(e){S.errors.push('Pools: '+e.message);}
-
-  showLoader('Reading on-chain positions & balances…');
-  for(const w of S.wallets){
-    const wd={balances:[],positions:{supplies:[],borrows:[]},claimedRewards:[],voloHoldings:[]};
-    S.perWallet[w.address]=wd;
-    const [bals,rewards]=await Promise.allSettled([fetchBalances(w.address),fetchClaimedRewards(w.address)]);
-    if(bals.status==='fulfilled')wd.balances=bals.value;
-    if(rewards.status==='fulfilled')wd.claimedRewards=rewards.value;
-
-    try{wd.positions=await fetchUserPositions(w.address);}catch(e){S.errors.push(`Positions ${w.name}: ${e.message}`);}
-
-    for(const b of wd.balances){
-      if(normCT(b.coinType)===normCT(VOLO_CERT_TYPE)){
-        const amt=Number(b.balance)/1e9;
-        const vp=Object.values(S.coinTypeToPool).find(p=>(p.token?.symbol||'').toLowerCase()==='vsui');
-        const price=vp?Number(vp.token?.price||0):0;
-        wd.voloHoldings.push({amount:amt,valueUSD:amt*price,price});
+    showLoader('Reading on-chain positions & balances…');
+    async function loadWallet(w){
+      const wd={balances:[],positions:{supplies:[],borrows:[]},claimedRewards:[],voloHoldings:[]};
+      S.perWallet[w.address]=wd;
+      const [bals,rewards,volo]=await Promise.allSettled([
+        fetchBalances(w.address),fetchClaimedRewards(w.address),fetchVoloPosition(w.address)]);
+      if(bals.status==='fulfilled')wd.balances=bals.value;
+      if(rewards.status==='fulfilled')wd.claimedRewards=rewards.value;
+      if(volo.status==='fulfilled'&&volo.value.length){
+        for(const vp of volo.value){
+          wd.voloHoldings.push({amount:vp.poolShareTokenBalance||0,valueUSD:vp.poolShareTokenUsd||0,
+            price:vp.tokenPrice||0,apr:vp.vaultApr||0,yieldLifetimeUsd:vp.yieldLifetimeUsd||0,
+            yieldLifetimeAmount:vp.yieldLifetimeAmount||0,protocol:vp.protocol||'volo'});
+        }
       }
+      try{wd.positions=await fetchUserPositions(w.address);}catch(e){S.errors.push(`Positions ${w.name}: ${e.message}`);}
     }
+    await Promise.all(S.wallets.map(w=>loadWallet(w)));
+  }catch(e){
+    S.errors.push('Fatal: '+e.message);console.error('loadAllData fatal:',e);
+  }finally{
+    S.lastUpdated=new Date();hideLoader();renderAll();
   }
-  S.lastUpdated=new Date();hideLoader();renderAll();
 }
 
 /* ── Aggregation ── */
 function agg(){
-  let tSupUSD=0,tBorUSD=0,tSupYield=0,tBorCost=0;
+  let tSupUSD=0,tBorUSD=0,tSupYield=0,tBorCost=0,tVoloYield=0;
   const allS=[],allB=[],allBal=[],allCl=[],allV=[];
   for(const w of S.wallets){
     const d=S.perWallet[w.address];if(!d)continue;
@@ -381,14 +395,31 @@ function agg(){
       const amt=Number(b.balance)/(10**b.decimals);allBal.push({...b,walletName:w.name,amount:amt,price,valueUSD:amt*price});
     }
     for(const r of d.claimedRewards)allCl.push({...r,walletName:w.name});
-    for(const v of d.voloHoldings){allV.push({...v,walletName:w.name});tSupUSD+=v.valueUSD;}
+    for(const v of d.voloHoldings){
+      const voloAnnualYield=v.valueUSD*(v.apr||0)/100;
+      tVoloYield+=voloAnnualYield;
+      allV.push({...v,walletName:w.name,annualYield:voloAnnualYield});
+      tSupUSD+=v.valueUSD;
+    }
   }
+  const totalYield=tSupYield+tVoloYield;
+  const netPnl=totalYield-tBorCost;
   const hf=tBorUSD>0?allS.reduce((s,p)=>s+p.valueUSD*(p.liqThreshold||0),0)/tBorUSD:null;
-  return{tSupUSD,tBorUSD,netValue:tSupUSD-tBorUSD,netPnl:tSupYield-tBorCost,hf,allS,allB,allBal,allCl,allV};
+  return{tSupUSD,tBorUSD,netValue:tSupUSD-tBorUSD,netPnl,tVoloYield,hf,allS,allB,allBal,allCl,allV};
 }
 
 /* ── Render All ── */
-function renderAll(){const a=agg();renderShareBar();renderYield(a);renderPositions(a);renderUnclaimed();renderMonthly(a);renderFooter();}
+function renderAll(){
+  const a=agg();renderShareBar();renderErrors();renderYield(a);renderPositions(a);renderUnclaimed();renderMonthly(a);renderFooter();
+}
+function renderErrors(){
+  let el=document.getElementById('err-bar');
+  if(!el){el=document.createElement('div');el.id='err-bar';
+    document.getElementById('p-yield').insertBefore(el,document.getElementById('share-bar').nextSibling);}
+  if(!S.errors.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="alert critical" style="margin-bottom:12px"><div class="alert-title at-red">Data Loading Issues (${S.errors.length})</div>
+    <div style="font-size:12px;color:var(--t2)">${S.errors.map(e=>'• '+e).join('<br>')}</div></div>`;
+}
 
 function renderEmpty(){
   hideLoader();
@@ -431,7 +462,7 @@ function renderYield(a){
     tr.innerHTML=`<td${bold?' style="font-weight:700"':''}>${bold?'<strong>'+l+'</strong>':l+wt}</td><td class="r ${c}">${sign}${fUSD(Math.abs(v))}</td><td style="font-size:12px;color:var(--t2)">${n}</td>`;yb.appendChild(tr);};
 
   for(const s of allS){row('NAVI Supply Interest',s.walletName,s.valueUSD*s.apr/100,'+','vg',`${fPct(s.apr)} on ${fUSD(s.valueUSD)} · ${s.asset}`);}
-  for(const v of allV){row('Volo vSUI Holdings',v.walletName,0,'+','vm',`${fNum(v.amount,2)} vSUI ≈ ${fUSD(v.valueUSD)}`);}
+  for(const v of allV){row('Volo Vault Yield',v.walletName,v.annualYield||0,'+','vg',`${fPct(v.apr)} on ${fUSD(v.valueUSD)} · ${fNum(v.amount,0)} vSUI`);}
   if(!allS.length&&!allV.length)row('No supply positions',null,0,'','vm','—');
   for(const b of allB){row('Borrow Cost',b.walletName,b.valueUSD*b.apr/100,'−','vr',`${fPct(b.apr)} on ${fUSD(b.valueUSD)} · ${b.asset}`);}
   if(!allB.length)row('Borrow Cost',null,0,'','vm','No borrows — zero cost');
@@ -462,8 +493,9 @@ function renderPositions(a){
 
   const vs=document.getElementById('sec-volo'),vb=document.getElementById('volo-body');
   if(allV.length){vs.style.display='';vb.innerHTML='';
-    for(const w of S.wallets){const d=S.perWallet[w.address];if(!d)continue;for(const v of d.voloHoldings)vb.insertAdjacentHTML('beforeend',`<tr><td><div class="ac">${aiH('vSUI')}<div style="font-size:13px;font-weight:600">vSUI</div></div></td><td>${w.name}</td><td class="r">${fNum(v.amount,4)}</td><td class="r">${fUSD(v.valueUSD)}</td></tr>`);}
-    vb.insertAdjacentHTML('beforeend',`<tr class="tr-total"><td><strong>Total</strong></td><td></td><td></td><td class="r"><strong>${fUSD(allV.reduce((s,v)=>s+v.valueUSD,0))}</strong></td></tr>`);}
+    for(const w of S.wallets){const d=S.perWallet[w.address];if(!d)continue;for(const v of d.voloHoldings)vb.insertAdjacentHTML('beforeend',`<tr><td><div class="ac">${aiH('vSUI')}<div><div style="font-size:13px;font-weight:600">vSUI</div><div style="font-size:10px;color:var(--tm)">${v.protocol||'volo'}</div></div></div></td><td>${w.name}</td><td class="r">${fNum(v.amount,2)}</td><td class="r">${fUSD(v.valueUSD)}</td><td class="r vg">${v.apr?fPct(v.apr):'—'}</td><td class="r vg">${fUSD(v.yieldLifetimeUsd||0)}</td></tr>`);}
+    const tVolo=allV.reduce((s,v)=>s+v.valueUSD,0),tYieldLt=allV.reduce((s,v)=>s+(v.yieldLifetimeUsd||0),0);
+    vb.insertAdjacentHTML('beforeend',`<tr class="tr-total"><td><strong>Total</strong></td><td></td><td></td><td class="r"><strong>${fUSD(tVolo)}</strong></td><td></td><td class="r"><strong>${fUSD(tYieldLt)}</strong></td></tr>`);}
   else vs.style.display='none';
 
   const bb=document.getElementById('bal-body');bb.innerHTML='';
