@@ -95,7 +95,8 @@ tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:#fafbfc}
 .tr-total td{font-weight:700;background:var(--sf);border-top:1px solid var(--bd);border-bottom:none!important}
 .ac{display:flex;align-items:center;gap:9px}
-.ai{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:1.5px solid var(--bd)}
+.ai{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:1.5px solid var(--bd);overflow:hidden}
+.ai img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .ai-usdc{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
 .ai-sui{background:#e0f2fe;color:#0369a1;border-color:#bae6fd}
 .ai-vsui{background:var(--gbg);color:var(--gt);border-color:var(--gb)}
@@ -183,10 +184,10 @@ tbody tr:hover{background:#fafbfc}
   </div>
   <div id="p-monthly" class="panel">
     <div class="c3" id="monthly-cards"></div>
-    <div class="sec"><div class="sec-head"><span class="sec-title">Monthly Claimed Rewards</span><div class="sec-right"><span class="data-src">● On-chain claim transactions</span></div></div>
+    <div class="sec"><div class="sec-head"><span class="sec-title">Rewards & Yield Overview</span><div class="sec-right"><span class="data-src">● On-chain + NAVI API</span></div></div>
       <div class="chart-wrap"><canvas id="rwd-chart"></canvas></div></div>
-    <div class="sec"><div class="sec-head"><span class="sec-title">Monthly Breakdown</span></div>
-      <table><thead><tr><th>Month</th><th class="r">Claimed Rewards</th><th>Tokens</th><th class="r">Avg Price</th><th class="r">Total USD</th></tr></thead><tbody id="mo-body"></tbody></table></div>
+    <div class="sec"><div class="sec-head"><span class="sec-title">History / Breakdown</span></div>
+      <table><thead><tr><th>Date</th><th class="r">Type / Rewards</th><th>Tokens</th><th class="r">Wallet / Avg</th><th class="r">Total USD</th></tr></thead><tbody id="mo-body"></tbody></table></div>
   </div>
   <div class="page-ft"><span id="ft-txt">Connecting…</span><div class="ft-chips"><span class="ft-chip">SUI Mainnet</span><span class="ft-chip">NAVI v2</span><span class="ft-chip">Volo</span><span class="ft-chip">Navi Prime</span></div></div>
 </div>
@@ -217,7 +218,7 @@ const KNOWN_DECIMALS = {
 };
 
 let S = { wallets:[], pools:[], poolMap:{}, coinTypeToPool:{}, perWallet:{}, errors:[], lastUpdated:null, chartInst:null,
-  userInfoTableId: null, reserveTableId: null };
+  userInfoTableId: null, reserveTableId: null, naviConfig: null };
 
 /* ── URL Router ── */
 const Router = {
@@ -266,7 +267,17 @@ function shortAddr(a){return a?a.slice(0,6)+'…'+a.slice(-4):'';}
 function normCT(ct){return(ct||'').replace(/^0x0+/,'0x');}
 function extractSym(ct){if(!ct)return'?';const p=ct.split('::'),r=p[p.length-1];if(r==='CERT')return'vSUI';if(r==='COIN'){if(ct.includes('5d4b30'))return'wUSDC';if(ct.includes('c06000'))return'wUSDT';if(ct.includes('af8cd5'))return'WETH';if(ct.includes('027792'))return'WBTC';if(ct.includes('b7844e'))return'SOL';}return r;}
 function guessDec(sym,ct){if(KNOWN_DECIMALS[sym])return KNOWN_DECIMALS[sym];const p=S.coinTypeToPool[normCT(ct)];return p?.token?.decimals||9;}
-function aiH(sym){const s=(sym||'').toLowerCase();if(s.includes('vsui')||s==='cert')return'<div class="ai ai-vsui">vS</div>';if(s==='sui')return'<div class="ai ai-sui">SU</div>';if(s.includes('usdc'))return'<div class="ai ai-usdc">UC</div>';if(s.includes('usdt'))return'<div class="ai ai-usdc">UT</div>';if(s.includes('navx'))return'<div class="ai ai-navx">NX</div>';if(s.includes('deep'))return'<div class="ai ai-deep">DP</div>';return`<div class="ai ai-x">${(sym||'??').slice(0,2).toUpperCase()}</div>`;}
+function getLogoUri(sym){
+  for(const p of S.pools){if(p.token&&p.token.symbol===sym&&p.token.logoUri)return p.token.logoUri;}
+  const s=(sym||'').toLowerCase();
+  for(const p of S.pools){if(p.token&&(p.token.symbol||'').toLowerCase()===s&&p.token.logoUri)return p.token.logoUri;}
+  return null;
+}
+function aiH(sym){
+  const logo=getLogoUri(sym);
+  if(logo)return`<div class="ai"><img src="${logo}" alt="${sym}" onerror="this.parentElement.innerHTML='${(sym||'??').slice(0,2).toUpperCase()}';this.parentElement.classList.add('ai-x')"></div>`;
+  const s=(sym||'').toLowerCase();if(s.includes('vsui')||s==='cert')return'<div class="ai ai-vsui">vS</div>';if(s==='sui')return'<div class="ai ai-sui">SU</div>';if(s.includes('usdc'))return'<div class="ai ai-usdc">UC</div>';if(s.includes('usdt'))return'<div class="ai ai-usdc">UT</div>';if(s.includes('navx'))return'<div class="ai ai-navx">NX</div>';if(s.includes('deep'))return'<div class="ai ai-deep">DP</div>';return`<div class="ai ai-x">${(sym||'??').slice(0,2).toUpperCase()}</div>`;
+}
 
 /* ── Data Fetchers ── */
 async function fetchPools(){
@@ -295,8 +306,42 @@ async function fetchVoloPosition(addr){
     if(!r.ok)throw new Error(r.status);
     const d=await r.json();
     if(Array.isArray(d)&&d.length)return d;
-  }catch(e){console.warn('Volo API proxy failed, falling back to wallet balance:',e.message);}
+  }catch(e){console.warn('Volo position API:',e.message);}
   return[];
+}
+
+async function fetchVoloStatus(addr){
+  try{
+    const r=await fetch(`/api/volo-status?address=${addr}`);
+    if(!r.ok)return null;
+    return await r.json();
+  }catch{return null;}
+}
+
+async function fetchUnclaimedRewards(addr){
+  try{
+    const r=await fetch(`/api/unclaimed?address=${addr}`);
+    if(!r.ok)throw new Error(r.status);
+    return await r.json();
+  }catch(e){console.warn('Unclaimed rewards API:',e.message);return{rewards:[],summary:[]};}
+}
+
+async function fetchTotalClaimed(addr){
+  try{
+    const r=await fetch(`${NAVI_API}/navi/user/total_claimed_reward?userAddress=${addr}`);
+    if(!r.ok)return{USDValue:0};
+    const d=await r.json();
+    return d.data||{USDValue:0};
+  }catch{return{USDValue:0};}
+}
+
+async function fetchTransactions(addr){
+  try{
+    const r=await fetch(`${NAVI_API}/navi/user/transactions?userAddress=${addr}`);
+    if(!r.ok)return[];
+    const d=await r.json();
+    return d.data?.data||[];
+  }catch{return[];}
 }
 
 async function readStorageStructure(){
@@ -383,12 +428,22 @@ async function loadAllData(){
 
     showLoader('Reading on-chain positions & balances…');
     async function loadWallet(w){
-      const wd={balances:[],positions:{supplies:[],borrows:[]},claimedRewards:[],voloHoldings:[]};
+      const wd={balances:[],positions:{supplies:[],borrows:[]},claimedRewards:[],voloHoldings:[],
+        unclaimedRewards:[],unclaimedSummary:[],totalClaimedUSD:0,transactions:[],voloStatus:null};
       S.perWallet[w.address]=wd;
-      const [bals,rewards,volo]=await Promise.allSettled([
-        fetchBalances(w.address),fetchClaimedRewards(w.address),fetchVoloPosition(w.address)]);
+      const [bals,rewards,volo,unclaimed,totalClaimed,txns,voloStat]=await Promise.allSettled([
+        fetchBalances(w.address),fetchClaimedRewards(w.address),fetchVoloPosition(w.address),
+        fetchUnclaimedRewards(w.address),fetchTotalClaimed(w.address),fetchTransactions(w.address),
+        fetchVoloStatus(w.address)]);
       if(bals.status==='fulfilled')wd.balances=bals.value;
       if(rewards.status==='fulfilled')wd.claimedRewards=rewards.value;
+      if(unclaimed.status==='fulfilled'&&unclaimed.value){
+        wd.unclaimedRewards=unclaimed.value.rewards||[];
+        wd.unclaimedSummary=unclaimed.value.summary||[];
+      }
+      if(totalClaimed.status==='fulfilled')wd.totalClaimedUSD=totalClaimed.value?.USDValue||0;
+      if(txns.status==='fulfilled')wd.transactions=txns.value||[];
+      if(voloStat.status==='fulfilled'&&voloStat.value)wd.voloStatus=voloStat.value;
       if(volo.status==='fulfilled'&&volo.value.length){
         for(const vp of volo.value){
           wd.voloHoldings.push({amount:vp.poolShareTokenBalance||0,valueUSD:vp.poolShareTokenUsd||0,
@@ -420,8 +475,9 @@ async function loadAllData(){
 
 /* ── Aggregation ── */
 function agg(){
-  let tSupUSD=0,tBorUSD=0,tSupYield=0,tBorCost=0,tVoloYield=0;
-  const allS=[],allB=[],allBal=[],allCl=[],allV=[];
+  let tSupUSD=0,tBorUSD=0,tSupYield=0,tBorCost=0,tVoloYield=0,tClaimedUSD=0;
+  const allS=[],allB=[],allBal=[],allCl=[],allV=[],allUncl=[],allTxns=[];
+  let voloStatusAgg={depositedUsd:0,yieldLifetimeUsd:0,yield7dUsd:0};
   for(const w of S.wallets){
     const d=S.perWallet[w.address];if(!d)continue;
     for(const s of d.positions.supplies){tSupUSD+=s.valueUSD;tSupYield+=s.valueUSD*s.apr/100;allS.push({...s,walletName:w.name});}
@@ -431,6 +487,14 @@ function agg(){
       const amt=Number(b.balance)/(10**b.decimals);allBal.push({...b,walletName:w.name,amount:amt,price,valueUSD:amt*price});
     }
     for(const r of d.claimedRewards)allCl.push({...r,walletName:w.name});
+    for(const u of d.unclaimedRewards)allUncl.push({...u,walletName:w.name});
+    for(const tx of d.transactions)allTxns.push({...tx,walletName:w.name});
+    tClaimedUSD+=d.totalClaimedUSD||0;
+    if(d.voloStatus){
+      voloStatusAgg.depositedUsd+=d.voloStatus.depositedUsd||0;
+      voloStatusAgg.yieldLifetimeUsd+=d.voloStatus.yieldLifetimeUsd||0;
+      voloStatusAgg.yield7dUsd+=d.voloStatus.yield7dUsd||0;
+    }
     for(const v of d.voloHoldings){
       const voloAnnualYield=v.valueUSD*(v.apr||0)/100;
       tVoloYield+=voloAnnualYield;
@@ -441,12 +505,12 @@ function agg(){
   const totalYield=tSupYield+tVoloYield;
   const netPnl=totalYield-tBorCost;
   const hf=tBorUSD>0?allS.reduce((s,p)=>s+p.valueUSD*(p.liqThreshold||0),0)/tBorUSD:null;
-  return{tSupUSD,tBorUSD,netValue:tSupUSD-tBorUSD,netPnl,tVoloYield,hf,allS,allB,allBal,allCl,allV};
+  return{tSupUSD,tBorUSD,netValue:tSupUSD-tBorUSD,netPnl,tVoloYield,hf,allS,allB,allBal,allCl,allV,allUncl,allTxns,tClaimedUSD,voloStatusAgg};
 }
 
 /* ── Render All ── */
 function renderAll(){
-  const a=agg();renderShareBar();renderErrors();renderYield(a);renderPositions(a);renderUnclaimed();renderMonthly(a);renderFooter();
+  const a=agg();renderShareBar();renderErrors();renderYield(a);renderPositions(a);renderUnclaimed(a);renderMonthly(a);renderFooter();
 }
 function renderErrors(){
   let el=document.getElementById('err-bar');
@@ -547,27 +611,75 @@ function renderPositions(a){
 }
 
 /* ── Tab 3: Unclaimed ── */
-function renderUnclaimed(){
+function renderUnclaimed(a){
+  const{allUncl,tClaimedUSD}=a;
+
+  let totalUnclUSD=0;
+  const rewardsBySym={};
+  for(const r of allUncl){
+    const sym=extractSym(r.rewardCoinType||'');
+    const dec=guessDec(sym,r.rewardCoinType);
+    const amt=Number(r.userClaimableReward||0);
+    if(amt<=0)continue;
+    const pool=Object.values(S.coinTypeToPool).find(p=>(p.token?.symbol||'')==sym||(p.suiCoinType||'')===(r.rewardCoinType||''));
+    const price=pool?Number(pool.token?.price||0):0;
+    const usd=amt*price;
+    totalUnclUSD+=usd;
+    if(!rewardsBySym[sym])rewardsBySym[sym]={sym,amount:0,usd:0,price,coinType:r.rewardCoinType};
+    rewardsBySym[sym].amount+=amt;
+    rewardsBySym[sym].usd+=usd;
+  }
+
   document.getElementById('unc-cards').innerHTML=`
-    <div class="mc"><div class="mc-lbl">Unclaimed Rewards</div><div class="mc-val muted" style="font-size:16px">Requires SDK</div><div class="mc-sub">NAVI incentive contract read</div></div>
-    <div class="mc"><div class="mc-lbl">Wallets</div><div class="mc-val teal">${S.wallets.length}</div><div class="mc-sub">${S.wallets.map(w=>w.name).join(', ')}</div></div>
-    <div class="mc"><div class="mc-lbl">Common Reward Tokens</div><div class="mc-val muted" style="font-size:16px">vSUI, NAVX, DEEP</div><div class="mc-sub">NAVI incentive types</div></div>`;
-  document.getElementById('unc-body').innerHTML=`<tr><td colspan="7"><div class="empty" style="flex-direction:column;align-items:flex-start;gap:4px;padding:20px">
-    <div style="font-weight:600">Unclaimed amounts require calling NAVI incentive contracts on-chain</div>
-    <div style="font-size:12px">Check <a href="https://app.naviprotocol.io/" target="_blank" style="color:var(--teal)">app.naviprotocol.io</a> for real-time unclaimed balances.</div></div></td></tr>`;
+    <div class="mc"><div class="mc-lbl">Unclaimed Rewards</div><div class="mc-val ${totalUnclUSD>0?'green':'muted'}" style="font-size:22px">${totalUnclUSD>0?fUSD(totalUnclUSD):'$0.00'}</div><div class="mc-sub">${allUncl.length} reward entries</div></div>
+    <div class="mc"><div class="mc-lbl">Total Claimed (lifetime)</div><div class="mc-val blue" style="font-size:22px">${fUSD(tClaimedUSD)}</div><div class="mc-sub">NAVI on-chain records</div></div>
+    <div class="mc"><div class="mc-lbl">Reward Tokens</div><div class="mc-val teal" style="font-size:22px">${Object.keys(rewardsBySym).length||'—'}</div><div class="mc-sub">${Object.keys(rewardsBySym).join(', ')||'None detected'}</div></div>`;
+
+  const ub=document.getElementById('unc-body');ub.innerHTML='';
+  if(!allUncl.length||!Object.keys(rewardsBySym).length){
+    ub.innerHTML=`<tr><td colspan="7"><div class="empty" style="flex-direction:column;align-items:flex-start;gap:4px;padding:20px">
+      <div style="font-weight:600">暂无可领取的激励奖励</div>
+      <div style="font-size:12px">可能原因：仓位刚建立、尚未积累足够奖励，或 API 未返回数据。</div>
+      <div style="font-size:12px">也可访问 <a href="https://app.naviprotocol.io/" target="_blank" style="color:var(--teal)">app.naviprotocol.io</a> 查看实时状态。</div></div></td></tr>`;
+    return;
+  }
+
+  for(const r of allUncl){
+    const sym=extractSym(r.rewardCoinType||'');
+    const amt=Number(r.userClaimableReward||0);
+    if(amt<=0)continue;
+    const assetSym=extractSym(r.assetCoinType||'');
+    const pool=Object.values(S.coinTypeToPool).find(p=>(p.token?.symbol||'')==sym);
+    const price=pool?Number(pool.token?.price||0):0;
+    const usd=amt*price;
+    const optionLabel=r.option===1?'Supply':r.option===2?'Borrow':r.option===3?'Supply (eMode)':`Option ${r.option}`;
+    ub.insertAdjacentHTML('beforeend',`<tr>
+      <td><div class="ac">${aiH(sym)}<div style="font-size:13px;font-weight:600">${sym}</div></div></td>
+      <td>${assetSym} Pool</td>
+      <td><span class="tag t-sup">${optionLabel}</span></td>
+      <td class="r">${fNum(amt,amt<1?6:2)}</td>
+      <td class="r vm">${price?'$'+fNum(price,price<1?6:2):'—'}</td>
+      <td class="r vg">${usd>0.001?fUSD(usd):'< $0.01'}</td>
+      <td><span class="tag t-wal">${r.walletName||r.market||'main'}</span></td></tr>`);
+  }
+  if(totalUnclUSD>0){
+    ub.insertAdjacentHTML('beforeend',`<tr class="tr-total"><td><strong>Total Unclaimed</strong></td><td></td><td></td><td></td><td></td><td class="r vg"><strong>${fUSD(totalUnclUSD)}</strong></td><td></td></tr>`);
+  }
 }
 
 /* ── Tab 4: Monthly ── */
 function renderMonthly(a){
-  const{allCl}=a;const cards=document.getElementById('monthly-cards'),tbody=document.getElementById('mo-body');
+  const{allCl,allTxns,tClaimedUSD,netPnl,voloStatusAgg}=a;
+  const cards=document.getElementById('monthly-cards'),tbody=document.getElementById('mo-body');
+
   const byMonth={};
   for(const r of allCl){
     const ts=r.timestamp?new Date(r.timestamp):null;if(!ts||isNaN(ts))continue;
     const k=`${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}`;
     const lbl=ts.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
     if(!byMonth[k])byMonth[k]={k,lbl,usd:0,tokens:{},cnt:0};
-    const sym=extractSym(r.coin_type||'');const dec=KNOWN_DECIMALS[sym]||9;
-    const amt=Number(r.amount||0)/(10**dec);const price=Number(r.token_price||0);
+    const sym=extractSym(r.coin_type||r.coinType||'');const dec=KNOWN_DECIMALS[sym]||9;
+    const amt=Number(r.amount||0)/(10**dec);const price=Number(r.token_price||r.tokenPrice||0);
     byMonth[k].usd+=amt*price;byMonth[k].cnt++;
     if(!byMonth[k].tokens[sym])byMonth[k].tokens[sym]={amount:0,usd:0};
     byMonth[k].tokens[sym].amount+=amt;byMonth[k].tokens[sym].usd+=amt*price;
@@ -575,25 +687,66 @@ function renderMonthly(a){
   const months=Object.values(byMonth).sort((a,b)=>a.k.localeCompare(b.k));
   const tot=months.reduce((s,m)=>s+m.usd,0);const best=months.length?months.reduce((a,b)=>b.usd>a.usd?b:a):null;
 
+  const estMonthly=netPnl/12;
+  const voloLifetime=voloStatusAgg.yieldLifetimeUsd||0;
+
   cards.innerHTML=`
-    <div class="mc"><div class="mc-lbl">Total Claimed</div><div class="mc-val blue" style="font-size:22px">${fUSD(tot)}</div><div class="mc-sub">${allCl.length} transactions</div></div>
-    <div class="mc"><div class="mc-lbl">Best Month</div><div class="mc-val" style="font-size:20px">${best?best.lbl:'—'}</div><div class="mc-sub">${best?fUSD(best.usd):'No data'}</div></div>
-    <div class="mc"><div class="mc-lbl">Months Active</div><div class="mc-val teal" style="font-size:22px">${months.length}</div><div class="mc-sub">On-chain records</div></div>`;
+    <div class="mc"><div class="mc-lbl">Total Claimed (lifetime)</div><div class="mc-val blue" style="font-size:22px">${fUSD(tClaimedUSD||tot)}</div><div class="mc-sub">${allCl.length?allCl.length+' claim txns':'Via NAVI API'}</div></div>
+    <div class="mc"><div class="mc-lbl">Est. Monthly Yield</div><div class="mc-val green" style="font-size:22px">${fUSD(estMonthly)}</div><div class="mc-sub">Based on current APRs</div></div>
+    <div class="mc"><div class="mc-lbl">Volo Lifetime Yield</div><div class="mc-val teal" style="font-size:22px">${voloLifetime>0?fUSD(voloLifetime):'—'}</div><div class="mc-sub">${voloStatusAgg.yield7dUsd>0?'7d: '+fUSD(voloStatusAgg.yield7dUsd):'No Volo positions'}</div></div>`;
 
   tbody.innerHTML='';
-  if(!months.length){tbody.innerHTML=`<tr><td colspan="5"><div class="empty">No claim transactions found for these addresses</div></td></tr>`;}
-  else{let sum=0;for(const m of months){sum+=m.usd;
-    const tl=Object.entries(m.tokens).map(([s,d])=>`${fNum(d.amount,0)} ${s}`).join(', ');
-    const ta=Object.values(m.tokens).reduce((s,t)=>s+t.amount,0);
-    tbody.insertAdjacentHTML('beforeend',`<tr><td>${m.lbl}</td><td class="r vg">${fUSD(m.usd)}</td><td style="font-size:11px;color:var(--t2)">${tl}</td><td class="r vm">${ta>0?'$'+fNum(m.usd/ta,4):'—'}</td><td class="r" style="font-weight:600">${fUSD(m.usd)}</td></tr>`);}
-    tbody.insertAdjacentHTML('beforeend',`<tr class="tr-total"><td>Total</td><td class="r vg">${fUSD(sum)}</td><td></td><td></td><td class="r">${fUSD(sum)}</td></tr>`);}
+  if(months.length){
+    let sum=0;for(const m of months){sum+=m.usd;
+      const tl=Object.entries(m.tokens).map(([s,d])=>`${fNum(d.amount,0)} ${s}`).join(', ');
+      const ta=Object.values(m.tokens).reduce((s,t)=>s+t.amount,0);
+      tbody.insertAdjacentHTML('beforeend',`<tr><td>${m.lbl}</td><td class="r vg">${fUSD(m.usd)}</td><td style="font-size:11px;color:var(--t2)">${tl}</td><td class="r vm">${ta>0?'$'+fNum(m.usd/ta,4):'—'}</td><td class="r" style="font-weight:600">${fUSD(m.usd)}</td></tr>`);}
+    tbody.insertAdjacentHTML('beforeend',`<tr class="tr-total"><td>Total</td><td class="r vg">${fUSD(sum)}</td><td></td><td></td><td class="r">${fUSD(sum)}</td></tr>`);
+  }
+
+  if(!months.length&&allTxns.length){
+    for(const tx of allTxns.sort((a,b)=>Number(b.timestamp||0)-Number(a.timestamp||0))){
+      const ts=tx.timestamp?new Date(Number(tx.timestamp)):null;
+      const dateStr=ts?ts.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}):'—';
+      const changes=(tx.coinChanges||[]).map(c=>{
+        const sym=c.symbol||'?';
+        const dec=KNOWN_DECIMALS[sym]||9;
+        const amt=Math.abs(Number(c.amount||0))/(10**dec);
+        const val=c.value!=null?Math.abs(Number(c.value)):0;
+        return{sym,amt,val,sign:Number(c.amount||0)<0?'-':'+'};
+      });
+      const tokStr=changes.map(c=>`${c.sign}${fNum(c.amt,2)} ${c.sym}`).join(', ');
+      const valStr=changes.reduce((s,c)=>s+c.val,0);
+      const typeBadge=tx.type==='supply'?'<span class="tag t-sup">Supply</span>'
+        :tx.type==='withdraw'?'<span class="tag" style="background:var(--rbg);color:var(--rt);border:1px solid var(--rbd)">Withdraw</span>'
+        :tx.type==='claim'?'<span class="tag" style="background:var(--abg);color:var(--amber);border:1px solid var(--abd)">Claim</span>'
+        :`<span class="tag t-wal">${tx.type||'—'}</span>`;
+      tbody.insertAdjacentHTML('beforeend',`<tr><td>${dateStr}</td><td class="r">${typeBadge}</td><td style="font-size:11px;color:var(--t2)">${tokStr}</td><td class="r vm">${tx.walletName||''}</td><td class="r" style="font-weight:600">${valStr>0?fUSD(valStr):'—'}</td></tr>`);
+    }
+  }
+
+  if(!months.length&&!allTxns.length){
+    tbody.innerHTML=`<tr><td colspan="5"><div class="empty" style="flex-direction:column;align-items:flex-start;gap:4px;padding:20px">
+      <div style="font-weight:600">暂无奖励领取记录</div>
+      <div style="font-size:12px">这些钱包尚未执行过 claim 操作。上方显示基于当前 APR 的预估月收益。</div></div></td></tr>`;
+  }
 
   if(S.chartInst){S.chartInst.destroy();S.chartInst=null;}
   const ctx=document.getElementById('rwd-chart');
-  if(!ctx||!months.length||typeof Chart==='undefined')return;
-  S.chartInst=new Chart(ctx,{type:'bar',data:{labels:months.map(m=>m.lbl),datasets:[{label:'Claimed (USD)',data:months.map(m=>m.usd),backgroundColor:'rgba(37,99,235,.75)',borderRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fUSD(c.parsed.y)}}},
-    scales:{x:{ticks:{color:'#94a3b8',font:{size:11}},grid:{display:false}},y:{beginAtZero:true,ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'k',color:'#94a3b8',font:{size:11}},grid:{color:'#eef1f5'}}}}});
+  if(!ctx||typeof Chart==='undefined')return;
+  if(months.length){
+    S.chartInst=new Chart(ctx,{type:'bar',data:{labels:months.map(m=>m.lbl),datasets:[{label:'Claimed (USD)',data:months.map(m=>m.usd),backgroundColor:'rgba(37,99,235,.75)',borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fUSD(c.parsed.y)}}},
+      scales:{x:{ticks:{color:'#94a3b8',font:{size:11}},grid:{display:false}},y:{beginAtZero:true,ticks:{callback:v=>v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v.toFixed(0),color:'#94a3b8',font:{size:11}},grid:{color:'#eef1f5'}}}}});
+  }else if(netPnl>0){
+    const mths=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const now=new Date();const curM=now.getMonth();
+    const labels=[];const data=[];
+    for(let i=0;i<12;i++){labels.push(mths[(curM+i)%12]);data.push(estMonthly);}
+    S.chartInst=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Est. Monthly Yield (USD)',data,backgroundColor:'rgba(13,148,136,.5)',borderRadius:4,borderWidth:1,borderColor:'rgba(13,148,136,.8)',borderDash:[5,5]}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fUSD(c.parsed.y)+' (estimated)'}}},
+      scales:{x:{ticks:{color:'#94a3b8',font:{size:11}},grid:{display:false}},y:{beginAtZero:true,ticks:{callback:v=>v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v.toFixed(0),color:'#94a3b8',font:{size:11}},grid:{color:'#eef1f5'}}}}});
+  }
 }
 
 function renderFooter(){
