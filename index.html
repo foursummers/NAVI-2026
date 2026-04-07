@@ -470,20 +470,46 @@ async function readStorageStructure(){
   S.reserveTableId=f.reserves?.fields?.id?.id;
 }
 
-async function fetchUserPositions(addr){
+async function fetchMCPPositions(addr){
+  const isLocal=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  if(isLocal)return null;
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),20000);
+  try{
+    const r=await fetch(`/api/positions?address=${addr}`,{signal:c.signal});
+    clearTimeout(t);
+    if(!r.ok)return null;
+    const data=await r.json();
+    if(!data?.positions?.length)return null;
+    const positions={supplies:[],borrows:[]};
+    for(const p of data.positions){
+      const pool=S.pools.find(pp=>pp.token?.symbol===p.tokenASymbol)||null;
+      if(p.type==='navi-lending-supply'){
+        positions.supplies.push({asset:p.tokenASymbol,amount:Number(p.amountA),
+          valueUSD:Number(p.valueUSD),apr:Number(p.apr||0),
+          liqThreshold:p.liquidationThreshold?Number(p.liquidationThreshold):null,
+          oraclePrice:Number(p.tokenAPrice||0),pool});
+      }else if(p.type==='navi-lending-borrow'){
+        positions.borrows.push({asset:p.tokenASymbol,amount:Number(p.amountA),
+          valueUSD:Number(p.valueUSD),apr:Number(p.apr||0),
+          oraclePrice:Number(p.tokenAPrice||0),pool});
+      }
+    }
+    if(positions.supplies.length||positions.borrows.length)return positions;
+    return null;
+  }catch(e){clearTimeout(t);console.warn('MCP positions:',e.message);return null;}
+}
+
+async function fetchUserPositionsOnChain(addr){
   const positions={supplies:[],borrows:[]};
   try{
     await readStorageStructure();
     if(!S.userInfoTableId)return positions;
-
     const uiObj=await suiRpc('suix_getDynamicFieldObject',[S.userInfoTableId,{type:'address',value:addr}]);
     const ui=uiObj?.data?.content?.fields?.value?.fields;
     if(!ui)return positions;
-
     const collaterals=ui.collaterals||[];
     const loans=ui.loans||[];
     const allIds=[...new Set([...collaterals,...loans])];
-
     for(const assetId of allIds){
       const pool=S.poolMap[assetId];
       if(!pool)continue;
@@ -491,11 +517,9 @@ async function fetchUserPositions(addr){
       const oraclePrice=Number(pool.oracle?.price||0);
       const tokenPrice=Number(pool.token?.price||oraclePrice);
       const liqThreshold=pool.liquidationFactor?.threshold?Number(pool.liquidationFactor.threshold):null;
-
       const reserveObj=await suiRpc('suix_getDynamicFieldObject',[S.reserveTableId,{type:'u8',value:assetId}]);
       const rv=reserveObj?.data?.content?.fields?.value?.fields;
       if(!rv)continue;
-
       if(collaterals.includes(assetId)){
         const supTableId=rv.supply_balance?.fields?.user_state?.fields?.id?.id;
         const curIdx=BigInt(rv.current_supply_index||'1000000000000000000000000000');
@@ -512,7 +536,6 @@ async function fetchUserPositions(addr){
           }catch(e){console.warn(`Supply read ${pool.token?.symbol}:`,e.message);}
         }
       }
-
       if(loans.includes(assetId)){
         const borTableId=rv.borrow_balance?.fields?.user_state?.fields?.id?.id;
         const curIdx=BigInt(rv.current_borrow_index||'1000000000000000000000000000');
@@ -530,8 +553,14 @@ async function fetchUserPositions(addr){
         }
       }
     }
-  }catch(e){console.warn('fetchUserPositions:',e.message);}
+  }catch(e){console.warn('fetchUserPositionsOnChain:',e.message);}
   return positions;
+}
+
+async function fetchUserPositions(addr){
+  const mcp=await fetchMCPPositions(addr);
+  if(mcp)return mcp;
+  return fetchUserPositionsOnChain(addr);
 }
 
 /* ── Main Loader ── */

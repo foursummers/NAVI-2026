@@ -5,6 +5,9 @@
     },
     "api/navi.js": {
       "maxDuration": 25
+    },
+    "api/positions.js": {
+      "maxDuration": 25
     }
   }
 }
