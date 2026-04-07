@@ -5,7 +5,7 @@
     "dev": "node dev.js"
   },
   "dependencies": {
-    "@naviprotocol/lending": "^1.4.0-emode.42",
+    "@naviprotocol/lending": "^1.4.0",
     "@mysten/sui": "^1.45.2"
   }
 }

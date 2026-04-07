@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/unclaimed.js": {
+      "maxDuration": 30
+    },
+    "api/navi.js": {
+      "maxDuration": 25
+    }
+  }
+}
