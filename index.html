@@ -61,11 +61,6 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .wm-btn.sec:hover{background:var(--rbg);color:var(--red);border-color:var(--rbd)}
 .wm-msg{font-size:10px;color:var(--red);margin-top:4px;min-height:14px}
 .wm-msg.ok{color:var(--gt)}
-.sb-ft{padding:12px;border-top:1px solid var(--bdl);margin-top:auto}
-.net-st{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--rs)}
-.net-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
-.net-nm{font-size:12px;font-weight:600}
-.net-dt{font-size:10px;color:var(--tm)}
 .main{margin-left:var(--nw);flex:1;min-width:0}
 .panel{display:none;padding:24px 28px}
 .panel.active{display:block}
@@ -133,10 +128,54 @@ tbody tr:hover{background:#fafbfc}
 .data-src{font-size:10px;color:var(--tm);padding:2px 7px;border-radius:3px;background:var(--gbg);border:1px solid var(--gb);font-weight:600;white-space:nowrap}
 @media(max-width:900px){.sb{display:none}.main{margin-left:0}.c4{grid-template-columns:repeat(2,1fr)}.c3{grid-template-columns:1fr}}
 @media print{.sb,.hdr,.page-ft,.share-bar,.wmgr-toggle,.wmgr-panel{display:none!important}.main{margin-left:0}.panel{display:block!important}body{background:white}}
+.gate{position:fixed;inset:0;z-index:2000;background:linear-gradient(135deg,#f0fdfa 0%,#e0f2fe 40%,#eff6ff 100%);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .4s}
+.gate.hide{opacity:0;pointer-events:none}
+.gate-card{background:var(--w);border-radius:20px;padding:48px 44px 40px;text-align:center;max-width:420px;width:92%;box-shadow:0 25px 80px rgba(0,0,0,.08),0 4px 24px rgba(13,148,136,.06);position:relative;overflow:hidden}
+.gate-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--teal),#2563eb,var(--teal-m))}
+.gate-logo{margin:0 auto 20px;display:flex;align-items:center;justify-content:center;gap:10px}
+.gate-logo svg{flex-shrink:0}
+.gate-group{font-size:22px;font-weight:700;color:var(--t1);margin-bottom:6px;letter-spacing:-.02em}
+.gate-sub{font-size:13px;color:var(--t2);margin-bottom:28px}
+.pin-row{display:flex;gap:8px;justify-content:center;margin-bottom:24px}
+.pin-d{width:46px;height:54px;border:2px solid var(--bd);border-radius:12px;text-align:center;font-size:24px;font-weight:700;font-family:'Inter',system-ui,sans-serif;outline:none;background:var(--sf);color:var(--t1);transition:all .15s;caret-color:var(--teal)}
+.pin-d:focus{border-color:var(--teal);background:var(--w);box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.pin-d.err{border-color:var(--red);background:var(--rbg);animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+.gate-btn{width:100%;padding:12px 0;background:var(--teal);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;margin-bottom:12px}
+.gate-btn:hover{background:var(--teal-d);transform:translateY(-1px);box-shadow:0 4px 12px rgba(13,148,136,.25)}
+.gate-btn:active{transform:translateY(0)}
+.gate-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.gate-err{font-size:12px;color:var(--red);min-height:18px;margin-bottom:4px}
+.gate-ft{font-size:11px;color:var(--tm);display:flex;align-items:center;justify-content:center;gap:6px}
 </style>
 </head>
 <body>
 <div class="loader" id="loader"><div class="spin"></div><span id="loader-msg">Loading on-chain data…</span></div>
+
+<div class="gate" id="gate" style="display:none">
+  <div class="gate-card">
+    <div class="gate-logo">
+      <svg width="40" height="26" viewBox="0 0 36 24" fill="none"><path d="M36 15.3792V23.28C36 23.6784 35.6784 24 35.28 24H30.504C30.2064 24 29.9184 23.9088 29.676 23.7384L13.872 12.6096C13.3128 12.1872 12 12.3072 12 13.596V23.28C12 23.6784 11.6784 24 11.28 24H0.72C0.3216 24 0 23.6784 0 23.28V12.72C0 12.3216 0.3216 12 0.72 12H7.2C8.7072 12 9.6 11.0304 9.6 9.59998V1.19998C9.6 0.801581 9.9216 0.47998 10.32 0.47998H15.0864C15.432 0.47998 15.6816 0.573581 15.9264 0.751181L35.592 14.5944C35.8896 14.8032 36 15.0384 36 15.3792Z" fill="#0DC3A4"/><path d="M36 0.72V11.0352C36 11.4576 35.592 11.6736 35.244 11.4288L24.4128 3.8016C24.1536 3.6216 24 3.42 24 3.012V0.72C24 0.3216 24.3216 0 24.72 0H35.28C35.6784 0 36 0.3216 36 0.72Z" fill="#0DC3A4"/></svg>
+      <span style="font-size:16px;font-weight:700;color:var(--t1)">Navi Prime</span>
+    </div>
+    <div class="gate-group" id="gate-group">Portfolio Report</div>
+    <div class="gate-sub">Enter 6-digit access code to continue</div>
+    <div class="pin-row" id="pin-row">
+      <input class="pin-d" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="pin-d" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="pin-d" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="pin-d" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="pin-d" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="pin-d" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="gate-err" id="gate-err"></div>
+    <button class="gate-btn" id="gate-btn" onclick="unlockGate()">Unlock Dashboard</button>
+    <div class="gate-ft">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2.5" y="5.5" width="7" height="5" rx="1"/><path d="M4 5.5V4a2 2 0 014 0v1.5"/></svg>
+      Password protected · Read-only access
+    </div>
+  </div>
+</div>
 
 <header class="hdr">
   <div class="hdr-l">
@@ -154,7 +193,6 @@ tbody tr:hover{background:#fafbfc}
 <div class="layout">
 <nav class="sb">
   <div class="sb-inner" id="sb-inner"></div>
-  <div class="sb-ft"><div class="net-st"><div class="net-dot"></div><div><div class="net-nm">Sui Mainnet</div><div class="net-dt" id="sb-status">Connecting…</div></div></div></div>
 </nav>
 <div class="main">
   <div id="p-yield" class="panel active">
@@ -209,6 +247,9 @@ const DEFAULT_WALLETS = [
   {address:'0x20c1145f631cdfee7fd51a086e57b934effc38d494ae4cd9a5867792a009a284', name:'B7 - 02'}
 ];
 const IS_MANAGE = new URLSearchParams(location.search).has('manage');
+const URL_LOCK = new URLSearchParams(location.search).get('lock')||'';
+const URL_GROUP = decodeURIComponent(new URLSearchParams(location.search).get('group')||'').replace(/_/g,' ');
+let GATE_PASSED = false;
 
 const KNOWN_DECIMALS = {
   SUI:9, USDC:6, wUSDC:6, USDT:6, suiUSDT:6, suiUSDe:6, FDUSD:6, AUSD:6, USDY:6, BUCK:9, USDSUI:6,
@@ -219,6 +260,57 @@ const KNOWN_DECIMALS = {
 
 let S = { wallets:[], pools:[], poolMap:{}, coinTypeToPool:{}, perWallet:{}, errors:[], lastUpdated:null, chartInst:null,
   userInfoTableId: null, reserveTableId: null, naviConfig: null };
+
+/* ── Gate (PIN lock) ── */
+async function hashPin(pin){
+  const d=new TextEncoder().encode(pin);
+  const h=await crypto.subtle.digest('SHA-256',d);
+  return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,16);
+}
+function needsGate(){return!!URL_LOCK&&!IS_MANAGE&&!GATE_PASSED;}
+function initGate(){
+  const gate=document.getElementById('gate');
+  if(!needsGate()){gate.style.display='none';return false;}
+  gate.style.display='flex';
+  if(URL_GROUP)document.getElementById('gate-group').textContent=URL_GROUP;
+  const inputs=document.querySelectorAll('#pin-row .pin-d');
+  inputs.forEach((inp,i)=>{
+    inp.addEventListener('input',()=>{
+      inp.value=inp.value.replace(/\D/g,'');
+      if(inp.value&&i<5)inputs[i+1].focus();
+      if(i===5&&inp.value)unlockGate();
+    });
+    inp.addEventListener('keydown',e=>{
+      if(e.key==='Backspace'&&!inp.value&&i>0){inputs[i-1].focus();inputs[i-1].value='';}
+      if(e.key==='Enter')unlockGate();
+    });
+    inp.addEventListener('paste',e=>{
+      e.preventDefault();
+      const txt=(e.clipboardData.getData('text')||'').replace(/\D/g,'').slice(0,6);
+      for(let j=0;j<6;j++){inputs[j].value=txt[j]||'';if(txt[j]&&j<5)inputs[j+1].focus();}
+      if(txt.length===6)unlockGate();
+    });
+  });
+  setTimeout(()=>inputs[0].focus(),200);
+  return true;
+}
+async function unlockGate(){
+  const inputs=document.querySelectorAll('#pin-row .pin-d');
+  const pin=Array.from(inputs).map(i=>i.value).join('');
+  if(pin.length<6){document.getElementById('gate-err').textContent='Please enter all 6 digits';return;}
+  const h=await hashPin(pin);
+  if(h===URL_LOCK){
+    GATE_PASSED=true;
+    document.getElementById('gate').classList.add('hide');
+    setTimeout(()=>{document.getElementById('gate').style.display='none';},400);
+    loadAllData();
+  }else{
+    document.getElementById('gate-err').textContent='Incorrect code. Please try again.';
+    inputs.forEach(i=>{i.classList.add('err');i.value='';});
+    setTimeout(()=>inputs.forEach(i=>i.classList.remove('err')),600);
+    setTimeout(()=>inputs[0].focus(),300);
+  }
+}
 
 /* ── URL Router ── */
 const Router = {
@@ -235,13 +327,17 @@ const Router = {
     else{url.searchParams.delete('wallets');url.searchParams.delete('names');}
     history.replaceState(null,'',url.toString());
   },
-  shareLink(){
+  shareLink(opts){
     const u=new URL(location.href);
     u.searchParams.delete('manage');
     if(!u.searchParams.has('wallets')){
       u.searchParams.set('wallets',S.wallets.map(x=>x.address).join(','));
       u.searchParams.set('names',S.wallets.map(x=>x.name.replace(/\s+/g,'_')).join(','));
     }
+    if(opts?.group)u.searchParams.set('group',opts.group.replace(/\s+/g,'_'));
+    else if(u.searchParams.has('group')){}
+    if(opts?.lock)u.searchParams.set('lock',opts.lock);
+    else if(u.searchParams.has('lock')){}
     return u.toString();
   },
   manageLink(){
@@ -752,7 +848,6 @@ function renderMonthly(a){
 function renderFooter(){
   const ts=S.lastUpdated?S.lastUpdated.toLocaleTimeString():'—';
   document.getElementById('ft-txt').textContent=`Last updated: ${ts} · NAVI Open API + SUI RPC · All data on-chain real-time`;
-  document.getElementById('sb-status').textContent=`Live · ${ts}`;
 }
 
 /* ── Sidebar ── */
@@ -783,8 +878,12 @@ function buildSidebar(){
         <select class="wm-inp" id="wm-rm-sel" style="cursor:pointer"></select>
         <button class="wm-btn sec" onclick="removeWallet()">Remove Selected</button>
         <div class="wm-msg" id="wm-msg"></div>
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">
-          <div style="font-size:11px;font-weight:700;margin-bottom:6px">Share Report Link (read-only)</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)">
+          <div style="font-size:11px;font-weight:700;margin-bottom:6px">Share Settings</div>
+          <input class="wm-inp" id="wm-group" placeholder="Report name (e.g. B7 Portfolio)" value="${URL_GROUP||''}">
+          <input class="wm-inp" id="wm-pin" type="tel" maxlength="6" placeholder="6-digit access PIN (optional)" inputmode="numeric" style="letter-spacing:2px" value="">
+          <button class="wm-btn" onclick="generateShareLinks()" style="background:var(--blue);margin-bottom:8px">Generate Share Link</button>
+          <div style="font-size:11px;font-weight:700;margin-bottom:4px">Share Report Link (read-only, password-protected)</div>
           <div style="display:flex;gap:4px"><input class="wm-inp" id="share-url" readonly style="margin:0;font-family:monospace;font-size:9px;flex:1">
           <button class="wm-btn" style="width:auto;padding:0 10px;margin:0" onclick="copyShareLink()">Copy</button></div>
           <div style="margin-top:6px"><div style="font-size:11px;font-weight:700;margin-bottom:4px">Admin Link (with management)</div>
@@ -814,7 +913,28 @@ function addWallet(){if(!checkCode())return;const n=(document.getElementById('wm
   document.getElementById('wm-name').value='';document.getElementById('wm-addr').value='';wmMsg(n+' added.',true);loadAllData();}
 function removeWallet(){if(!checkCode())return;const s=document.getElementById('wm-rm-sel');if(!s||!S.wallets.length)return;
   const r=S.wallets.splice(+s.value,1)[0];Router.update(S.wallets);renderWalletList();syncRemoveSel();updateShareUrl();wmMsg(r.name+' removed.',true);loadAllData();}
-function copyShareLink(){navigator.clipboard.writeText(Router.shareLink()).then(()=>wmMsg('Copied!',true)).catch(()=>{});}
+async function generateShareLinks(){
+  const group=(document.getElementById('wm-group')?.value||'').trim();
+  const pin=(document.getElementById('wm-pin')?.value||'').replace(/\D/g,'');
+  if(pin&&pin.length!==6){wmMsg('PIN must be exactly 6 digits');return;}
+  const lock=pin?await hashPin(pin):'';
+  const u=new URL(location.href);
+  u.searchParams.delete('manage');
+  u.searchParams.set('wallets',S.wallets.map(x=>x.address).join(','));
+  u.searchParams.set('names',S.wallets.map(x=>x.name.replace(/\s+/g,'_')).join(','));
+  if(group)u.searchParams.set('group',group.replace(/\s+/g,'_'));else u.searchParams.delete('group');
+  if(lock)u.searchParams.set('lock',lock);else u.searchParams.delete('lock');
+  const shareUrl=u.toString();
+  const shareEl=document.getElementById('share-url');if(shareEl)shareEl.value=shareUrl;
+  const mu=new URL(shareUrl);mu.searchParams.set('manage','1');
+  const manageEl=document.getElementById('manage-url');if(manageEl)manageEl.value=mu.toString();
+  wmMsg(pin?'Link generated with PIN protection':'Link generated (no PIN)',true);
+}
+function copyShareLink(){
+  const el=document.getElementById('share-url');
+  if(el&&el.value)navigator.clipboard.writeText(el.value).then(()=>wmMsg('Copied!',true)).catch(()=>{});
+  else navigator.clipboard.writeText(Router.shareLink()).then(()=>wmMsg('Copied!',true)).catch(()=>{});
+}
 function cpAddr(a,b){navigator.clipboard.writeText(a).then(()=>{const o=b.innerHTML;b.innerHTML='<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5.5l2.5 2.5 4.5-4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';setTimeout(()=>b.innerHTML=o,1500);}).catch(()=>{});}
 function showPanel(id){document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='p-'+id));document.querySelectorAll('.ni[data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));}
 function showLoader(m){document.getElementById('loader-msg').textContent=m||'Loading…';document.getElementById('loader').classList.add('show');}
@@ -824,7 +944,11 @@ async function refreshData(){await loadAllData();}
 /* ── Boot ── */
 S.wallets=Router.parse();
 buildSidebar();
-loadAllData();
+if(initGate()){
+  /* Gate is shown — wait for PIN unlock before loading data */
+}else{
+  loadAllData();
+}
 </script>
 </body>
 </html>
