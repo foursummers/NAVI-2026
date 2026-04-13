@@ -252,7 +252,10 @@ const DEFAULT_WALLETS = [
   {address:'0x3cb47b90fc7634b6268280f006779e268d00dbb473a6cc700b9597bff092bd11', name:'B7 - 01'},
   {address:'0x20c1145f631cdfee7fd51a086e57b934effc38d494ae4cd9a5867792a009a284', name:'B7 - 02'}
 ];
-const IS_MANAGE = new URLSearchParams(location.search).has('manage');
+const _sp = new URLSearchParams(location.search);
+const IS_MANAGE = _sp.has('manage');
+const IS_SHARE = _sp.has('wallets') && !IS_MANAGE;
+const SHOW_ADMIN = !IS_SHARE;
 const URL_LOCK = new URLSearchParams(location.search).get('lock')||'';
 const URL_GROUP = decodeURIComponent(new URLSearchParams(location.search).get('group')||'').replace(/_/g,' ');
 let GATE_PASSED = false;
@@ -677,7 +680,7 @@ function renderEmpty(){
 
 function renderShareBar(){
   const el=document.getElementById('share-bar');if(!S.wallets.length){el.innerHTML='';return;}
-  if(!IS_MANAGE){el.innerHTML='';return;}
+  if(!SHOW_ADMIN){el.innerHTML='';return;}
   const link=Router.shareLink();
   el.innerHTML=`<div class="share-bar"><span style="font-weight:600;white-space:nowrap">📊 Admin Mode</span>
     <input readonly value="${link}" onclick="this.select()" title="Share link (read-only)">
@@ -910,7 +913,7 @@ function buildSidebar(){
     b.innerHTML=`${n.icon}<span><span class="ni-lm">${n.label}</span><span class="ni-ls">${n.sub}</span></span>`;b.onclick=()=>showPanel(n.id);si.appendChild(b);});
   si.insertAdjacentHTML('beforeend','<div class="nd"></div><div class="ns-lbl">Wallets</div>');
   const ww=document.createElement('div');ww.id='wl-wrap';si.appendChild(ww);renderWalletList();
-  if(IS_MANAGE){
+  if(SHOW_ADMIN){
     si.insertAdjacentHTML('beforeend',`
       <div class="wmgr-toggle" onclick="document.getElementById('wmgr-panel').classList.toggle('open')" style="background:var(--teal-bg);border-color:var(--teal-m);color:var(--teal-d)">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 4v4M4 6h4" stroke-linecap="round"/></svg> Manage Wallets</div>
