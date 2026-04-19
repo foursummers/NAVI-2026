@@ -8,6 +8,9 @@
     },
     "api/positions.js": {
       "maxDuration": 25
+    },
+    "api/portfolio-pnl.js": {
+      "maxDuration": 15
     }
   }
 }
