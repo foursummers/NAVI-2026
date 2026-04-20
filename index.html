@@ -255,12 +255,13 @@ tbody tr:hover{background:#fafbfc}
     <div class="c3" id="monthly-cards"></div>
     <div class="sec"><div class="sec-head"><span class="sec-title">Rewards & Yield Overview</span><div class="sec-right">
       <select id="chart-metric-sel" class="wm-inp" style="width:auto;margin:0;font-size:11px;padding:4px 8px">
-        <option value="daily_interest">Daily Interest (NAVI)</option>
-        <option value="monthly_pnl">Monthly P&L</option>
-        <option value="net_worth">Net Worth Trend</option>
+        <option value="daily_interest">Daily NAVI Interest</option>
+        <option value="monthly_pnl">Monthly NAVI Interest</option>
+        <option value="net_worth">NAVI Net Worth Trend</option>
       </select>
       <span class="data-src">● On-chain + NAVI API</span></div></div>
-      <div class="chart-wrap"><canvas id="rwd-chart"></canvas></div></div>
+      <div class="chart-wrap"><canvas id="rwd-chart"></canvas></div>
+      <div style="padding:4px 20px 12px;font-size:10px;color:var(--tm)">Chart reflects NAVI lending interest only. Volo vault yield is estimated separately.</div></div>
   </div>
   <div class="page-ft"><span id="ft-txt">Connecting…</span><div class="ft-chips"><span class="ft-chip">SUI Mainnet</span><span class="ft-chip">NAVI v2</span><span class="ft-chip">Volo</span><span class="ft-chip">Navi Prime</span></div></div>
 </div>
@@ -768,11 +769,18 @@ function renderYield(a){
     const ltvStr=ltv!=null?(ltv>=0?'+':'')+fUSD(ltv):'—';
     tr.innerHTML=`<td${bold?' style="font-weight:700"':''}>${bold?'<strong>'+l+'</strong>':l+wt}</td><td class="r ${c}">${sign}${fUSD(Math.abs(v))}</td><td class="r ${c}">${ltvStr}</td><td style="font-size:12px;color:var(--t2)">${n}</td>`;yb.appendChild(tr);};
 
-  let naviSubAnnual=0;for(const s of allS){const ann=s.valueUSD*s.apr/100;naviSubAnnual+=ann;row('NAVI Supply Interest',s.walletName,ann,'+','vg',`${fPct(s.apr)} on ${fUSD(s.valueUSD)} · ${s.asset}`);}
+  let naviSubAnnual=0;for(const s of allS){const ann=s.valueUSD*s.apr/100;naviSubAnnual+=ann;
+    const wAddr=S.wallets.find(w=>w.name===s.walletName)?.address;
+    const ltYield=wAddr?(S.perWallet[wAddr]?.portfolioPnl?.cumulative_pnl||0):0;
+    row('NAVI Supply Interest',s.walletName,ann,'+','vg',`${fPct(s.apr)} on ${fUSD(s.valueUSD)} · ${s.asset}`,false,ltYield);}
   if(allS.length>1)row('Subtotal NAVI Supply',null,naviSubAnnual,'+','vg','',false,a.accNaviSupplyInterest);
-  let voloSubAnnual=0;for(const v of allV){voloSubAnnual+=v.annualYield||0;row('Volo Vault Yield',v.walletName,v.annualYield||0,'+','vg',`${fPct(v.apr)} on ${fUSD(v.valueUSD)} · ${fNum(v.amount,0)} vSUI`);}
-  if(allV.length>1)row('Subtotal Volo Yield',null,voloSubAnnual,'+','vg','',false,a.accVoloVaultYield);
-  if(!allS.length&&!allV.length)row('No supply positions',null,0,'','vm','—');
+  let voloSubAnnual=0;if(allV.length){for(const v of allV){voloSubAnnual+=v.annualYield||0;
+    const wAddr=S.wallets.find(w=>w.name===v.walletName)?.address;
+    const voloLt=wAddr?(S.perWallet[wAddr]?.voloStatus?.yieldLifetimeUsd||0):0;
+    row('Volo Vault Yield',v.walletName,v.annualYield||0,'+','vg',`${fPct(v.apr)} on ${fUSD(v.valueUSD)} · ${fNum(v.amount,0)} vSUI`,false,voloLt);}
+    if(allV.length>1)row('Subtotal Volo Yield',null,voloSubAnnual,'+','vg','',false,a.accVoloVaultYield);
+  }else if(a.accVoloVaultYield>0){row('Volo Vault Yield',null,0,'+','vm','No active positions — historical yield only',false,a.accVoloVaultYield);}
+  if(!allS.length&&!allV.length&&a.accVoloVaultYield<=0)row('No supply positions',null,0,'','vm','—');
   for(const b of allB){row('Borrow Cost',b.walletName,b.valueUSD*b.apr/100,'−','vr',`${fPct(b.apr)} on ${fUSD(b.valueUSD)} · ${b.asset}`);}
   if(!allB.length)row('Borrow Cost',null,0,'','vm','No borrows — zero cost');
   row('Net on-chain P&L',null,netPnl,netPnl>=0?'+':'−',netPnl>=0?'vg':'vr','Annual from current APRs',true,a.accPnl);
@@ -803,10 +811,12 @@ function renderPositions(a){
     h+=`<tr class="tr-total"><td><strong>Total</strong></td><td></td><td class="r vr"><strong>${fUSD(allB.reduce((s,p)=>s+p.valueUSD,0))}</strong></td><td></td></tr></tbody></table>`;bc.innerHTML=h;}
 
   const vs=document.getElementById('sec-volo'),vb=document.getElementById('volo-body');
+  const hasVoloHistory=a.voloStatusAgg.yieldLifetimeUsd>0;
   if(allV.length){vs.style.display='';vb.innerHTML='';
     for(const w of S.wallets){const d=S.perWallet[w.address];if(!d)continue;for(const v of d.voloHoldings)vb.insertAdjacentHTML('beforeend',`<tr><td><div class="ac">${aiH('vSUI')}<div><div style="font-size:13px;font-weight:600">vSUI</div><div style="font-size:10px;color:var(--tm)">${v.protocol||'volo'}</div></div></div></td><td>${w.name}</td><td class="r">${fNum(v.amount,2)}</td><td class="r">${fUSD(v.valueUSD)}</td><td class="r vg">${v.apr?fPct(v.apr):'—'}</td><td class="r vg">${fUSD(v.yieldLifetimeUsd||0)}</td></tr>`);}
     const tVolo=allV.reduce((s,v)=>s+v.valueUSD,0),tYieldLt=allV.reduce((s,v)=>s+(v.yieldLifetimeUsd||0),0);
     vb.insertAdjacentHTML('beforeend',`<tr class="tr-total"><td><strong>Total</strong></td><td></td><td></td><td class="r"><strong>${fUSD(tVolo)}</strong></td><td></td><td class="r"><strong>${fUSD(tYieldLt)}</strong></td></tr>`);}
+  else if(hasVoloHistory){vs.style.display='';vb.innerHTML=`<tr><td><div class="ac">${aiH('vSUI')}<div><div style="font-size:13px;font-weight:600">vSUI</div><div style="font-size:10px;color:var(--tm)">Withdrawn</div></div></div></td><td>—</td><td class="r">0.00</td><td class="r">$0.00</td><td class="r">—</td><td class="r vg">${fUSD(a.voloStatusAgg.yieldLifetimeUsd)}</td></tr>`;}
   else vs.style.display='none';
 
   const bb=document.getElementById('bal-body');bb.innerHTML='';
@@ -878,7 +888,7 @@ function renderMonthly(a){
   const cards=document.getElementById('monthly-cards');
 
   cards.innerHTML=`
-    <div class="mc"><div class="mc-lbl">Monthly P&L</div><div class="mc-val green" style="font-size:22px">${fUSD(monthlyPnl)}</div><div class="mc-sub">This month's net yield</div></div>
+    <div class="mc"><div class="mc-lbl">Monthly P&L</div><div class="mc-val green" style="font-size:22px">${fUSD(monthlyPnl)}</div><div class="mc-sub">NAVI (actual) + Volo (estimated from 7d)</div></div>
     <div class="mc"><div class="mc-lbl">Monthly NAVI Supply Interest</div><div class="mc-val blue" style="font-size:22px">${fUSD(monthlyNaviSupplyInterest)}</div><div class="mc-sub">From NAVI lending positions</div></div>
     <div class="mc"><div class="mc-lbl">Monthly Volo Vault Yield</div><div class="mc-val teal" style="font-size:22px">${fUSD(monthlyVoloVaultYield)}</div><div class="mc-sub">${monthlyVoloVaultYield>0?'Estimated from 7d yield':'No Volo positions'}</div></div>`;
 
@@ -900,7 +910,7 @@ function renderMonthlyChart(a){
     if(metric==='daily_interest'){
       labels=sorted.map(d=>{const dt=new Date(d.date);return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});});
       data=sorted.map(d=>d.interest_loss||0);
-      label='Daily Interest (USD)';color='rgba(37,99,235,.75)';
+      label='Daily NAVI Interest (USD)';color='rgba(37,99,235,.75)';
     }else if(metric==='net_worth'){
       labels=sorted.map(d=>{const dt=new Date(d.date);return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});});
       data=sorted.map(d=>d.net_worth||0);
@@ -909,12 +919,12 @@ function renderMonthlyChart(a){
       const byMonth={};
       for(const d of sorted){
         const dt=new Date(d.date);const k=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-        const lbl=dt.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+        const lbl=new Date(dt.getFullYear(),dt.getMonth(),1).toLocaleDateString('en-US',{month:'short',year:'2-digit'});
         if(!byMonth[k])byMonth[k]={lbl,val:0};byMonth[k].val+=d.interest_loss||0;
       }
-      const months=Object.values(byMonth);
+      const months=Object.entries(byMonth).sort(([a],[b])=>a.localeCompare(b)).map(([,v])=>v);
       labels=months.map(m=>m.lbl);data=months.map(m=>m.val);
-      label='Monthly P&L (USD)';color='rgba(37,99,235,.75)';
+      label='Monthly NAVI Interest (USD)';color='rgba(37,99,235,.75)';
     }
     const chartType=metric==='net_worth'?'line':'bar';
     S.chartInst=new Chart(ctx,{type:chartType,data:{labels,datasets:[{label,data,
